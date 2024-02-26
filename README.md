@@ -2,7 +2,8 @@
 Simple Node Exporter for custom Blockchain Metrics for Prometheus server
 # Simple Node Exporter for Custom Blockchain Metrics
 
-This is a simple node exporter designed to collect custom metrics from a blockchain node and expose them for scraping by a Prometheus server. It parses information from a status file provided by the blockchain node and formats the metrics in a way that Prometheus can understand.
+This is a simple node exporter designed to collect custom metrics from a blockchain node and expose them for scraping by a Prometheus server or Zabbix. It parses information from a status file provided by the blockchain node and formats the metrics in a way that Prometheus can understand.
+
 
 ![screen](screen.png)
 ## Usage
