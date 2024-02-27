@@ -1,8 +1,19 @@
 # namada-simple-node-exporter
 Simple Node Exporter for custom Blockchain Metrics for Prometheus server
-# Simple Node Exporter for Custom Blockchain Metrics
+Demo Link Here : https://namadaexporter.validatrium.club/metrics
+
+# Simple Node Exporter for Custom Blockchain Metrics in Namada
 
 This is a simple node exporter designed to collect custom metrics from a blockchain node and expose them for scraping by a Prometheus server or Zabbix. It parses information from a status file provided by the blockchain node and formats the metrics in a way that Prometheus can understand.
+You can connect different RPS, add or remove the metrics you need.
+In addition, you have the opportunity to configure notifications and alert manager via Gotify and Alertmanager
+
+For example, as soon as the height of the block stops changing, this will mean that there is something wrong with the node and the monitoring will send you a notification.
+This means either the update or the network has stopped
+
+HELP latest_block_height The latest block height
+TYPE latest_block_height gauge
+**latest_block_height 78805**
 
 
 ![screen](screen.png)
