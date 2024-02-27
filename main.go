@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
-	"./gotify_notifier"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
-
 
 type Status struct {
 	Jsonrpc string `json:"jsonrpc"`
@@ -49,74 +49,114 @@ type Status struct {
 	} `json:"result"`
 }
 
-
 type Exporter struct {
-	URI string
-	mu  sync.Mutex
+	URI                    string
+	mutex                  sync.RWMutex
+	latestBlockHeightGauge prometheus.Gauge
+	latestBlockTimeGauge   prometheus.Gauge
+	earliestBlockHeightGauge prometheus.Gauge
+	earliestBlockTimeGauge   prometheus.Gauge
+	catchingUpGauge        prometheus.Gauge
+	votingPowerGauge       prometheus.Gauge
+	networkInfoGauge       prometheus.Gauge
 }
 
+func NewExporter(uri string) *Exporter {
+	return &Exporter{
+		URI: uri,
+		latestBlockHeightGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "latest_block_height",
+			Help: "The latest block height",
+		}),
+		latestBlockTimeGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "latest_block_time",
+			Help: "The latest block time",
+		}),
+		earliestBlockHeightGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "earliest_block_height",
+			Help: "The earliest block height",
+		}),
+		earliestBlockTimeGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "earliest_block_time",
+			Help: "The earliest block time",
+		}),
+		catchingUpGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "catching_up",
+			Help: "Whether the node is catching up",
+		}),
+		votingPowerGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "voting_power",
+			Help: "The validator's voting power",
+		}),
+		networkInfoGauge: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "network_info",
+			Help: "Information about the network",
+		}),
+	}
+}
 
-func (e *Exporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
+func (e *Exporter) Describe(ch chan<- *prometheus.Desc) {
+	e.latestBlockHeightGauge.Describe(ch)
+	e.latestBlockTimeGauge.Describe(ch)
+	e.earliestBlockHeightGauge.Describe(ch)
+	e.earliestBlockTimeGauge.Describe(ch)
+	e.catchingUpGauge.Describe(ch)
+	e.votingPowerGauge.Describe(ch)
+	e.networkInfoGauge.Describe(ch)
+}
+
+func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
 
 	data, err := ioutil.ReadFile(e.URI)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var status Status
 	if err := json.Unmarshal(data, &status); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	latestBlockHeight, err := strconv.ParseFloat(status.Result.SyncInfo.LatestBlockHeight, 64)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	e.latestBlockHeightGauge.Set(latestBlockHeight)
+
 	earliestBlockHeight, err := strconv.ParseFloat(status.Result.SyncInfo.EarliestBlockHeight, 64)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	e.earliestBlockHeightGauge.Set(earliestBlockHeight)
+
+	catchingUp := 0.0
+	if status.Result.SyncInfo.CatchingUp {
+		catchingUp = 1.0
+	}
+	e.catchingUpGauge.Set(catchingUp)
+
 	votingPower, err := strconv.ParseFloat(status.Result.ValidatorInfo.VotingPower, 64)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	e.votingPowerGauge.Set(votingPower)
 
-
-	fmt.Fprintf(w, "latest_block_height %f\n", latestBlockHeight)
-	fmt.Fprintf(w, "latest_block_time %s\n", status.Result.SyncInfo.LatestBlockTime)
-	fmt.Fprintf(w, "earliest_block_height %f\n", earliestBlockHeight)
-	fmt.Fprintf(w, "earliest_block_time %s\n", status.Result.SyncInfo.EarliestBlockTime)
-	fmt.Fprintf(w, "catching_up %t\n", status.Result.SyncInfo.CatchingUp)
-	fmt.Fprintf(w, "voting_power %f\n", votingPower)
-	fmt.Fprintf(w, "network %s\n", status.Result.NodeInfo.Network)
-	fmt.Fprintf(w, "moniker %s\n", status.Result.NodeInfo.Moniker)
-	fmt.Fprintf(w, "version %s\n", status.Result.NodeInfo.Version)
-	fmt.Fprintf(w, "channels %s\n", status.Result.NodeInfo.Channels)
-	fmt.Fprintf(w, "p2p_protocol_version %s\n", status.Result.NodeInfo.ProtocolVersion.P2p)
-	fmt.Fprintf(w, "block_protocol_version %s\n", status.Result.NodeInfo.ProtocolVersion.Block)
-	fmt.Fprintf(w, "app_protocol_version %s\n", status.Result.NodeInfo.ProtocolVersion.App)
-	fmt.Fprintf(w, "listen_addr %s\n", status.Result.NodeInfo.ListenAddr)
-	fmt.Fprintf(w, "node_id %s\n", status.Result.NodeInfo.Id)
-	fmt.Fprintf(w, "validator_address %s\n", status.Result.ValidatorInfo.Address)
+	e.latestBlockHeightGauge.Collect(ch)
+	e.latestBlockTimeGauge.Collect(ch)
+	e.earliestBlockHeightGauge.Collect(ch)
+	e.earliestBlockTimeGauge.Collect(ch)
+	e.catchingUpGauge.Collect(ch)
+	e.votingPowerGauge.Collect(ch)
+	e.networkInfoGauge.Collect(ch)
 }
 
 func main() {
-	
-	exporter := &Exporter{
-		URI: "status.txt", 
-	}
+	exporter := NewExporter("status.txt")
+	prometheus.MustRegister(exporter)
 
-	
-	http.Handle("/metrics", exporter)
-
-
+	http.Handle("/metrics", promhttp.Handler())
 	fmt.Println("Starting server on :8080")
 	http.ListenAndServe(":8080", nil)
 }
